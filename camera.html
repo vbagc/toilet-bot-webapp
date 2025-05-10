@@ -1,105 +1,65 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8">
   <title>Toilet-Bot Camera</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
-    body {
-      font-family: sans-serif;
-      text-align: center;
-      padding: 1rem;
-    }
-    #captureBtn {
-      font-size: 1.5rem;
-      padding: 1rem;
-      margin-top: 2rem;
-      width: 80%;
-      max-width: 300px;
-    }
-    #preview {
-      margin-top: 1rem;
-      max-width: 100%;
-      display: none;
-    }
+    body { font-family: sans-serif; text-align: center; padding: 1rem; }
+    #msg { margin: 1.5rem 0; }
   </style>
 </head>
 <body>
   <h1>🚻 Toilet-Bot Camera</h1>
-  <button id="captureBtn">📷 Click Photo</button>
-  <img id="preview" alt="Preview"/>
+  <p id="msg">⌛ Checking your location…</p>
 
-  <!-- hidden file input -->
+  <!-- hidden file‐input that will *only* open the camera 🔒 -->
   <input
     type="file"
+    id="camInput"
     accept="image/*"
     capture="environment"
-    id="fileInput"
-    style="display:none"
+    style="display: none;"
   />
 
   <script>
-    const btn = document.getElementById('captureBtn');
-    const fileInput = document.getElementById('fileInput');
-    const preview = document.getElementById('preview');
+    const msg = document.getElementById('msg');
+    const input = document.getElementById('camInput');
     let lat, lon;
 
-    btn.addEventListener('click', () => {
-      btn.disabled = true;              // prevent double clicks
-      btn.textContent = '🌐 Checking location…';
-
+    // 1) get GPS
+    if (!navigator.geolocation) {
+      msg.textContent = '⚠️ Geolocation not supported on this device.';
+    } else {
       navigator.geolocation.getCurrentPosition(
-        pos => {
+        (pos) => {
           lat = pos.coords.latitude;
           lon = pos.coords.longitude;
-
-          // now open camera
-          btn.textContent = '📸 Opening camera…';
-          fileInput.click();
+          msg.textContent = '✅ Location OK — opening camera…';
+          // 2) now that we have location, immediately launch camera
+          input.click();
         },
-        err => {
-          alert('Please allow location access to continue.');
-          btn.disabled = false;
-          btn.textContent = '📷 Click Photo';
+        (err) => {
+          msg.innerHTML = '⚠️ Please allow location access and reload this page.';
         },
-        { enableHighAccuracy: true, timeout: 10000 }
+        { enableHighAccuracy: true }
       );
-    });
+    }
 
-    fileInput.addEventListener('change', async () => {
-      const file = fileInput.files[0];
-      if (!file) {
-        btn.disabled = false;
-        btn.textContent = '📷 Click Photo';
-        return;
-      }
-
-      // show preview (optional)
-      preview.src = URL.createObjectURL(file);
-      preview.style.display = 'block';
-
-      // read as base64
+    // 3) when the user snaps the pic, package and send back to your bot
+    input.onchange = () => {
+      const file = input.files[0];
       const reader = new FileReader();
       reader.onload = () => {
-        const data = {
-          image: reader.result, // data:image/jpeg;base64,...
-          lat, lon
-        };
-
-        // If you’re inside Telegram Web App:
-        if (window.Telegram && Telegram.WebApp) {
-          Telegram.WebApp.sendData(JSON.stringify(data));
-        } else {
-          // fallback: POST to your own server
-          fetch('/upload', {
-            method: 'POST',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify(data)
-          });
-        }
+        // send a JSON string back to your bot:
+        window.Telegram.WebApp.sendData(JSON.stringify({
+          image: reader.result,  // base64 data: you can decode & save
+          latitude: lat,
+          longitude: lon
+        }));
       };
       reader.readAsDataURL(file);
-    });
+    };
   </script>
 </body>
 </html>
