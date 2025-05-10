@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Toilet Snapshot</title>
+  <style>
+    body { margin: 0; font-family: sans-serif; text-align: center; }
+    #message { padding: 1em; }
+    video, canvas { width: 100%; max-width: 600px; }
+    button { font-size: 1.2em; margin: 0.5em; padding: 0.5em 1em; }
+  </style>
+</head>
+<body>
+  <div id="message">Checking GPS…</div>
+  <video id="video" autoplay style="display:none;"></video>
+  <canvas id="canvas" style="display:none;"></canvas>
+  <div>
+    <button id="capture" disabled>📸 Capture</button>
+    <button id="retake" style="display:none;">🔄 Retake</button>
+    <button id="send"   style="display:none;">✅ Use Photo</button>
+  </div>
+
+  <script>
+    const msg       = document.getElementById('message');
+    const video     = document.getElementById('video');
+    const canvas    = document.getElementById('canvas');
+    const btnCap    = document.getElementById('capture');
+    const btnRetake = document.getElementById('retake');
+    const btnSend   = document.getElementById('send');
+
+    let positionData = null;
+    const tg = window.Telegram.WebApp;
+
+    // 1) Ask for location
+    navigator.geolocation.getCurrentPosition(pos => {
+      positionData = pos.coords;
+      msg.innerText = "✅ GPS OK. Opening camera…";
+      // 2) Ask for camera
+      return navigator.mediaDevices.getUserMedia({ video: true });
+    }, err => {
+      msg.innerText = "⚠️ GPS is off or permission denied.\nPlease enable location services and reload.";
+      return Promise.reject(err);
+    }, { enableHighAccuracy: true, timeout: 5000 })
+    .then(stream => {
+      video.srcObject = stream;
+      video.style.display = 'block';
+      btnCap.disabled   = false;
+      msg.innerText     = "Point at the sticker and tap Capture";
+    })
+    .catch(console.error);
+
+    // 3) Capture
+    btnCap.onclick = () => {
+      const ctx = canvas.getContext('2d');
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0);
+      video.style.display   = 'none';
+      btnCap.style.display  = 'none';
+      btnRetake.style.display = 'inline';
+      btnSend.style.display   = 'inline';
+      canvas.style.display    = 'block';
+      msg.innerText = "Preview: Use or Retake";
+    };
+
+    // 4) Retake
+    btnRetake.onclick = () => {
+      canvas.style.display    = 'none';
+      btnRetake.style.display = 'none';
+      btnSend.style.display   = 'none';
+      video.style.display     = 'block';
+      btnCap.style.display    = 'inline';
+      msg.innerText           = "Point at the sticker and tap Capture";
+    };
+
+    // 5) Send to bot
+    btnSend.onclick = () => {
+      const dataUri = canvas.toDataURL('image/jpeg', 0.8);
+      tg.sendData(JSON.stringify({
+        lat:   positionData.latitude,
+        lon:   positionData.longitude,
+        image: dataUri
+      }));
+      tg.close();
+    };
+  </script>
+</body>
+</html>
