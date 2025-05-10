@@ -2,87 +2,104 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Toilet Bot Camera</title>
+  <title>Toilet-Bot Camera</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body { font-family: sans-serif; padding: 1rem; text-align: center }
-    button { font-size: 1.25rem; padding: 0.5rem 1rem; margin: 1rem; }
-    #capture { display: none; }
-    #status { margin-top: 2rem; }
-    video, img { max-width: 100%; margin-top: 1rem; }
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 1rem;
+    }
+    #captureBtn {
+      font-size: 1.5rem;
+      padding: 1rem;
+      margin-top: 2rem;
+      width: 80%;
+      max-width: 300px;
+    }
+    #preview {
+      margin-top: 1rem;
+      max-width: 100%;
+      display: none;
+    }
   </style>
 </head>
 <body>
   <h1>🚻 Toilet-Bot Camera</h1>
-  <div id="status">❓ Please enable location</div>
+  <button id="captureBtn">📷 Click Photo</button>
+  <img id="preview" alt="Preview"/>
 
-  <!-- 1) Ask for location -->
-  <button id="enableLoc">Enable Location</button>
-
-  <!-- 2) Once location is OK, let them take a picture -->
+  <!-- hidden file input -->
   <input
     type="file"
     accept="image/*"
     capture="environment"
-    id="capture"
+    id="fileInput"
+    style="display:none"
   />
 
-  <!-- Preview -->
-  <video id="preview" autoplay playsinline style="display:none;"></video>
-  <img id="snapshot" />
-
   <script>
-    const statusEl = document.getElementById('status');
-    const btnEnable = document.getElementById('enableLoc');
-    const inputCapture = document.getElementById('capture');
+    const btn = document.getElementById('captureBtn');
+    const fileInput = document.getElementById('fileInput');
     const preview = document.getElementById('preview');
-    const snapshot = document.getElementById('snapshot');
     let lat, lon;
 
-    btnEnable.addEventListener('click', () => {
-      statusEl.textContent = '🌐 Requesting location…';
+    btn.addEventListener('click', () => {
+      btn.disabled = true;              // prevent double clicks
+      btn.textContent = '🌐 Checking location…';
+
       navigator.geolocation.getCurrentPosition(
         pos => {
           lat = pos.coords.latitude;
           lon = pos.coords.longitude;
-          statusEl.textContent = '✅ Location OK. You can now take a photo.';
-          btnEnable.style.display = 'none';
-          inputCapture.style.display = 'inline-block';
+
+          // now open camera
+          btn.textContent = '📸 Opening camera…';
+          fileInput.click();
         },
         err => {
-          statusEl.textContent = '❌ Location denied or unavailable. Please allow location.';
+          alert('Please allow location access to continue.');
+          btn.disabled = false;
+          btn.textContent = '📷 Click Photo';
         },
         { enableHighAccuracy: true, timeout: 10000 }
       );
     });
 
-    // When user picks (or captures) an image:
-    inputCapture.addEventListener('change', async e => {
-      const file = e.target.files[0];
-      if (!file) return;
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files[0];
+      if (!file) {
+        btn.disabled = false;
+        btn.textContent = '📷 Click Photo';
+        return;
+      }
 
-      // Show a preview if you like:
-      const url = URL.createObjectURL(file);
-      snapshot.src = url;
-      snapshot.style.display = 'block';
+      // show preview (optional)
+      preview.src = URL.createObjectURL(file);
+      preview.style.display = 'block';
 
-      // Now you would POST `file` plus {lat,lon} back to your bot server
-      // via fetch(...) or Telegram WebApp.sendData(...)
-      // e.g. Telegram Web App integration:
-      // Telegram.WebApp.sendData(JSON.stringify({
-      //   image: await fileToBase64(file), lat, lon
-      // }));
+      // read as base64
+      const reader = new FileReader();
+      reader.onload = () => {
+        const data = {
+          image: reader.result, // data:image/jpeg;base64,...
+          lat, lon
+        };
+
+        // If you’re inside Telegram Web App:
+        if (window.Telegram && Telegram.WebApp) {
+          Telegram.WebApp.sendData(JSON.stringify(data));
+        } else {
+          // fallback: POST to your own server
+          fetch('/upload', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(data)
+          });
+        }
+      };
+      reader.readAsDataURL(file);
     });
-
-    // helper if you need Base64:
-    async function fileToBase64(file) {
-      return new Promise((res, rej) => {
-        const reader = new FileReader();
-        reader.onload = () => res(reader.result);
-        reader.onerror = () => rej(reader.error);
-        reader.readAsDataURL(file);
-      });
-    }
   </script>
 </body>
 </html>
