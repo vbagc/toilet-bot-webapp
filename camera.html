@@ -1,88 +1,88 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>Toilet Snapshot</title>
+  <meta charset="UTF-8" />
+  <title>Toilet Bot Camera</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body { margin: 0; font-family: sans-serif; text-align: center; }
-    #message { padding: 1em; }
-    video, canvas { width: 100%; max-width: 600px; }
-    button { font-size: 1.2em; margin: 0.5em; padding: 0.5em 1em; }
+    body { font-family: sans-serif; padding: 1rem; text-align: center }
+    button { font-size: 1.25rem; padding: 0.5rem 1rem; margin: 1rem; }
+    #capture { display: none; }
+    #status { margin-top: 2rem; }
+    video, img { max-width: 100%; margin-top: 1rem; }
   </style>
 </head>
 <body>
-  <div id="message">Checking GPS…</div>
-  <video id="video" autoplay style="display:none;"></video>
-  <canvas id="canvas" style="display:none;"></canvas>
-  <div>
-    <button id="capture" disabled>📸 Capture</button>
-    <button id="retake" style="display:none;">🔄 Retake</button>
-    <button id="send"   style="display:none;">✅ Use Photo</button>
-  </div>
+  <h1>🚻 Toilet-Bot Camera</h1>
+  <div id="status">❓ Please enable location</div>
+
+  <!-- 1) Ask for location -->
+  <button id="enableLoc">Enable Location</button>
+
+  <!-- 2) Once location is OK, let them take a picture -->
+  <input
+    type="file"
+    accept="image/*"
+    capture="environment"
+    id="capture"
+  />
+
+  <!-- Preview -->
+  <video id="preview" autoplay playsinline style="display:none;"></video>
+  <img id="snapshot" />
 
   <script>
-    const msg       = document.getElementById('message');
-    const video     = document.getElementById('video');
-    const canvas    = document.getElementById('canvas');
-    const btnCap    = document.getElementById('capture');
-    const btnRetake = document.getElementById('retake');
-    const btnSend   = document.getElementById('send');
+    const statusEl = document.getElementById('status');
+    const btnEnable = document.getElementById('enableLoc');
+    const inputCapture = document.getElementById('capture');
+    const preview = document.getElementById('preview');
+    const snapshot = document.getElementById('snapshot');
+    let lat, lon;
 
-    let positionData = null;
-    const tg = window.Telegram.WebApp;
+    btnEnable.addEventListener('click', () => {
+      statusEl.textContent = '🌐 Requesting location…';
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          lat = pos.coords.latitude;
+          lon = pos.coords.longitude;
+          statusEl.textContent = '✅ Location OK. You can now take a photo.';
+          btnEnable.style.display = 'none';
+          inputCapture.style.display = 'inline-block';
+        },
+        err => {
+          statusEl.textContent = '❌ Location denied or unavailable. Please allow location.';
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    });
 
-    // 1) Ask for location
-    navigator.geolocation.getCurrentPosition(pos => {
-      positionData = pos.coords;
-      msg.innerText = "✅ GPS OK. Opening camera…";
-      // 2) Ask for camera
-      return navigator.mediaDevices.getUserMedia({ video: true });
-    }, err => {
-      msg.innerText = "⚠️ GPS is off or permission denied.\nPlease enable location services and reload.";
-      return Promise.reject(err);
-    }, { enableHighAccuracy: true, timeout: 5000 })
-    .then(stream => {
-      video.srcObject = stream;
-      video.style.display = 'block';
-      btnCap.disabled   = false;
-      msg.innerText     = "Point at the sticker and tap Capture";
-    })
-    .catch(console.error);
+    // When user picks (or captures) an image:
+    inputCapture.addEventListener('change', async e => {
+      const file = e.target.files[0];
+      if (!file) return;
 
-    // 3) Capture
-    btnCap.onclick = () => {
-      const ctx = canvas.getContext('2d');
-      canvas.width  = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0);
-      video.style.display   = 'none';
-      btnCap.style.display  = 'none';
-      btnRetake.style.display = 'inline';
-      btnSend.style.display   = 'inline';
-      canvas.style.display    = 'block';
-      msg.innerText = "Preview: Use or Retake";
-    };
+      // Show a preview if you like:
+      const url = URL.createObjectURL(file);
+      snapshot.src = url;
+      snapshot.style.display = 'block';
 
-    // 4) Retake
-    btnRetake.onclick = () => {
-      canvas.style.display    = 'none';
-      btnRetake.style.display = 'none';
-      btnSend.style.display   = 'none';
-      video.style.display     = 'block';
-      btnCap.style.display    = 'inline';
-      msg.innerText           = "Point at the sticker and tap Capture";
-    };
+      // Now you would POST `file` plus {lat,lon} back to your bot server
+      // via fetch(...) or Telegram WebApp.sendData(...)
+      // e.g. Telegram Web App integration:
+      // Telegram.WebApp.sendData(JSON.stringify({
+      //   image: await fileToBase64(file), lat, lon
+      // }));
+    });
 
-    // 5) Send to bot
-    btnSend.onclick = () => {
-      const dataUri = canvas.toDataURL('image/jpeg', 0.8);
-      tg.sendData(JSON.stringify({
-        lat:   positionData.latitude,
-        lon:   positionData.longitude,
-        image: dataUri
-      }));
-      tg.close();
-    };
+    // helper if you need Base64:
+    async function fileToBase64(file) {
+      return new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onload = () => res(reader.result);
+        reader.onerror = () => rej(reader.error);
+        reader.readAsDataURL(file);
+      });
+    }
   </script>
 </body>
 </html>
